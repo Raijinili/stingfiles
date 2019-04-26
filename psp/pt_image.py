@@ -380,7 +380,6 @@ class PTAImage:
           unk_6,
         ] = shiftdata
         assert unk_6 in (0, 0x10)
-        ...
         #? What's a good way to shift an image?
         #... Let's not worry about it yet.
         canvas, palette = self.getspritedata(i)
@@ -392,8 +391,8 @@ class PTAImage:
         assert bitmap.dtype == np.uint8
         return Image.fromarray(bitmap)
 
-    def getshiftspritedata(self, offset, xbase=0, ybase=0):
-        """Get the shifted sprite bitmap represented by given offset of file.
+    def getshiftsprite2(self, offset):
+        """Get the shifted sprite represented by given offset of file. Shift in an enlarged canvas.
         """
         assert offset % 8 == 0
         index = (offset - 0xC0)//8
@@ -405,21 +404,33 @@ class PTAImage:
           unk_6,
         ] = shiftdata
         assert unk_6 in (0, 0x10)
-        ...
         #? What's a good way to shift an image?
         #... Let's not worry about it yet.
         canvas, palette = self.getspritedata(i)
-        canvas1 = np.roll(canvas, shift=(ybase+y_off, xbase+x_off), axis=(0, 1))
+        height, width = canvas.shape
+        canvas1 = np.zeros((height*2, width*2), dtype=np.uint8)
+        canvas1[height//2:-height//2, width//2:-width//2] = canvas
+        canvas1 = np.roll(canvas1, shift=(y_off, x_off), axis=(0, 1))
             # Definitely y then x.
             # Definitely positive x.
             # Definitely positive y.
         bitmap = palette[canvas1]
         assert bitmap.dtype == np.uint8
-        return bitmap
+        return Image.fromarray(bitmap)
+
 
     def getcombinedsprite(self, offset, count):
         #WTF COUNT CAN BE 0 (Necromancer disappearance).
         sprites = [self.getshiftsprite(offset + 8*i) for i in range(count)]
+        # Now combine them.
+        canvas = Image.new('RGBA', sprites[0].size, self.blank)
+        for sprite in sprites:
+            canvas.paste(sprite, mask=sprite)
+        return canvas
+
+    def getcombinedsprite2(self, offset, count):
+        #WTF COUNT CAN BE 0 (Necromancer disappearance).
+        sprites = [self.getshiftsprite2(offset + 8*i) for i in range(count)]
         # Now combine them.
         canvas = Image.new('RGBA', sprites[0].size, self.blank)
         for sprite in sprites:
@@ -432,7 +443,7 @@ class PTAImage:
         return sprites
     
     def getanimation(self, index):
-        """Returns (image, durframes, loopi or None) or None.
+        """Returns (images, durframes, loopi or None) or None.
         
         If an animation is None, that means this unit doesn't have an animation at that index.
         
@@ -461,7 +472,7 @@ class PTAImage:
                     # No, I want the right transparency.
                 img = Image.new('RGBA', img.size, self.blank)
             else:
-                img = self.getcombinedsprite(off, count)
+                img = self.getcombinedsprite2(off, count)
             sprites.append(img)
             durations.append(dur)
         return sprites, durations, loopi
