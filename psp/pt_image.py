@@ -17,6 +17,8 @@ FILL_MODES = {
 BPP_HALF = 4
 BPP_FULL = 5
 
+FRAMES_PER_SECOND = 60
+
 class PTXImage:
     fmt = '<BBHHHBBBBIBBBBII'
     assert struct.calcsize(fmt) == 0x1C
@@ -430,9 +432,39 @@ class PTAImage:
         return sprites
     
     def getanimation(self, index):
-        """List of ([image, durframes], loopi or None).
+        """Returns (image, durframes, loopi or None) or None.
+        
+        If an animation is None, that means this unit doesn't have an animation at that index.
+        
+        `loopi` is the index at which to restart the loop. If a `loopi` is missing, this means the animation doesn't loop.
+        
+        Duration is in frames, or 1/60ths of a second.
         """
-        ...
+        anim = self.table1[index]
+        if anim is None:
+            return None
+        *rows, [zero0, zero1, loopflag, loopi] = anim
+        assert zero0 == zero1 == 0
+        assert (loopi == 0xFF) == (loopflag == 0xFF)
+        assert (loopi != 0xFF) == (loopflag == 0)
+        sprites = []
+        durations = []
+        if loopi == 0xFF:
+            loopi = None
+        for j, (off, zero, count, dur) in enumerate(rows):
+            assert zero == 0
+            # Handle count=0.
+            if count == 0:  #Blank image.
+                assert j != 0, "First image is blank!"
+                # Use the previous image's dimensions.
+                #? Can I just use a 0-pixel image?
+                    # No, I want the right transparency.
+                img = Image.new('RGBA', img.size, self.blank)
+            else:
+                img = self.getcombinedsprite(off, count)
+            sprites.append(img)
+            durations.append(dur)
+        return sprites, durations, loopi
 
 
 def handle_inversion(x0, x1):
