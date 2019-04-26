@@ -1,0 +1,4 @@
+# TODO: Learn what a requirements.txt file is and how it works, then fix this.
+numpy
+pillow
+imageio

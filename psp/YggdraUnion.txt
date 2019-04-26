@@ -1,0 +1,359 @@
+Yggdra Union file format notes.
+
+== FCT ==
+Pretty simple archive file.
+Samples:
+    0000-ExiData.zlb (after decompressing).
+    0524-B
+
+00.4    ="FCT\0"
+04.4    File count?
+08.4    Offset to file list?
+        Eg: 0x10
+0C.4    =0?
+10.8*   table[offset, size]
+    ?- Padded to width 16.
+
+
+
+
+
+== @CNS ==
+
+00.4    ?="@CNS"
+04.4    ?="pta\0"
+
+
+
+== PTA ==
+An array of animations.
+
+Samples:
+    Within 0121-btlc to 0194-btlc.
+    0730-0 to 0800-S.
+    0752-2 (Fry).
+
+00.4    ="PTA\0"
+04.4    Offset of chunk 0.
+        ?=10
+08.4    Offset of chunk 1.
+0C.4    ?=0
+
+-- Chunk 0 (@00000010) ==
+10.4*2C Start of chunk 0.
+        Array of ascending ints, ending in -1. Unused entries are 0.
+        - The array is of alignment 8.
+        - They're offsets from the start.
+        - Bounded by 08.C.
+        ! In the tables that these point to:
+            - Row size is 8 bytes.
+            - Each seems to end with a row of 0s.
+            - +4.2 is probably palette (1-indexed). 00 and FF values only appear if the row starts with 0 (but doesn't mean it's all zeroes; a control structure?).
+        - Each index is for a particular animation. E.g. slot 0 is idle.
+
+Table 0 row (from 00C0 to the first ascending int) [08]:
+    +00.2   Indexes into the sprite array of chunk 1.
+    +02.2   X offset.
+            - Usually negative.
+    +04.2   Y offset.
+            - Usually positive.
+            ! Remember that it goes pixels[y, x].
+    +06.2   ??
+            0 or 0x10 (so far).
+
+
+
+Table 1 row (indexed by the array of ascending ints) [08]:
+        - A list of sprites for the animation.
+    +00.2   Pointers into table 0.
+    +02.2   =0?
+    +04.2   Count.
+            - The number of sprites to grab, starting from that pointer.
+                - E.g. If it's 4, grab 4 items starting at [+00.2].
+                - Makes sense because +00 jumps by 8x this value.
+                - Sample from Valk:
+                    F0 06 00 00 03 00 06 00 
+                    - Corresponds to:
+                        06F0    DC 00 BC FF 14 00 00 00 
+                        06F8    96 00 BC FF 14 00 00 00 
+                        0700    D0 00 BC FF 14 00 00 00 
+                    - Sprites 220t, 150t, 208t.
+    +06.2   Duration.
+            - Seen values from 4 to 0x1E (30).
+            - Unit seems to be frames, and assumes 60 FPS.
+Last row:
+    +00.2   =0
+    +02.2   =0?
+    +04.2   0 for loop, 255 (FF 00) for no-loop.
+            Seen: 0 255
+            Seems like it's only 255 if +06 is also 255.
+            - NOT -1, which would be FF FF instead of FF 00.
+    +06.2   Where to loop from.
+            Seen: 0 255 3 6 17 2
+
+Section is padded with 90s to alignment 16.
+
+
+-- Chunk 1 --
+    - All offsets in this section are relative to the start of this section.
+
+Part 0 header:
++00.4   Size of block. Alternatively, offset to palettes.
+        - OffsetX.
++04.4   Palette bitflags. Indicates which palette indices are available.
+        - The number of 1-bits corresponds to the number of palettes.
+        Samples:
+        01=00000001 Fry 0752 (1 palette)
+        0B=00001101 Fencer 0730 (3 palettes)
+        3B=00111101 Valkyrie 0731 (5 palettes)
+        - The indices of the palettes are probably significant.
++08.4   Offset from start of block to sprite assembly pointers.
++0C.4   Number of sprite assembly things.
+        - BLOCK[00.4] == ceilto(4*BLOCK[0C.4], 0x10) + 0x20
+            ! Doesn't work for Fry (0752-2).
+        - BLOCK[00.4] == ceilto(4*(BLOCK[0C.4]+BLOCK[14.4], 0x10) + 0x18
++10.4   Offset from start of block to PTX pointers.
+        A little smaller than +00.4.
+        E.g. -8, -C.
+        - Sturm calls it the offset to pixel data.
+        - BLOCK[10.4] == ceilto(4*BLOCK[0C.4], 0x10) + 0x18
++14.4   PTX count.
+
+- Then sprite assembly pointers.
+
+- Then PTX pointers.
+
+- Then padding to 16 bytes.
+
+- Then palettes.
+    ! The first sprite assembly thing is right after the last palette.
+
+- Then the sprite assembly things. (Pointed to by the array of sprite assembly pointers.)
+    +00.2   Array size.
+    +02.2   PTX index
+    +04.2   Palette (as flagged by palette_flags)
+    +06.2   Canvas width
+    +08.2   Canvas height
+    +0A.14* Array.
+    - THEN: Either 00 00 (indicating array size 0?) or a nonnegative number which is the array size of another part (using the same format as the first part).
+
+    Array [0014]:
+        - Same format as in PTGs.
+        - Some of the tiles are inverted, meaning start > end.
+            - Beware of off-by-one errors when handling this!
+    +00.2   Read start X
+    +02.2   Read start Y
+    +04.2   Write start X
+    +06.2   Write start Y
+    +08.2   =0?
+    +0A.2   Read end X (not inclusive)
+    +0C.2   Read end Y
+    +0E.2   Write end X (may go beyond canvas width)
+    +10.2   Write end Y
+    +12.2   =0?
+
+
+-- Animation table descriptions --
+
+00 00   idle
+01 01   battle stance
+02 02   running
+03 03   jump back
+04 04   jump forward and strike
+05 05   defend
+06 06   jump short and strike
+07 07   recoil from hit
+08 08   fall from hit
+09 09   attack 1 (basic)
+10 0A   attack 2 (hard hit)
+11 0B   dodge???
+12 0C   struck and panicked
+13 0D   strike and pose?
+14 0E   brandish (rage/max? and win)
+15 0F   cheering
+16 10   card activate.
+17 11   regular card attack?
+18 12   special card attack.
+19 13   fall tired
+20 14   crumple (die)
+21 15   spinning weapon
+22 16   solemn stand
+23 17   weapon falls into ground (angle)
+24 18   weapon falls into ground (vertical)
+25 19   summon?
+        0737 Assassin jumps back.
+        0740 Golem rises and walks.
+        0741 Skeleton rises and walks.
+        0752 Fry raises cane.
+        0775 Fry raises cane.
+26 1A   weapon falls into ground (angle, deep)
+27 1B   weapon falls into ground (vertical, deep)
+28 1C   eyes closed and still
+29 1D   eyes closed and still (shifted horizontal)
+30 1E   panicked
+31 1F   tired
+32 20   ded
+33 21   weapon in ground
+        - Valk missing this.
+34 22   weapon held forward.
+35 23   Yggdra's spinning weapon (golden)
+36 24   eyes closed floating (Archangel)
+37 25   eyes closed flapping (Angel)
+38 26   falling page (Nessiah)
+39 27   falling crumbling page
+40 28   page turns into bat and flies forward
+41 29   page turns into bat and flies around
+42 2A   page into bat and divebomb
+
+
+-- Specific file notes --
+
+- 0731:
+    - Animation 18t frames 5-7 have the shadow overlaid on top of the Valk. Is that an error?
+        - 8 is similar but has the overlay the other way.
+        - Animation table at 00000F58.
+        - Rows 5-9:
+            70 06 00 00 03 00 02 00 
+            0670    94 00 BC FF 14 00 00 00 valk
+            0678    E0 00 C4 FF 2C 00 00 00 shadow2
+            0680    DB 00 BE FF 0C 00 00 00 shadow1
+            88 06 00 00 03 00 02 00 
+            0688    94 00 BC FF 14 00 00 00 valk
+            0690    E0 00 C4 FF 2C 00 00 00 shadow2
+            0698    DB 00 BE FF 0C 00 00 00 shadow1
+            A0 06 00 00 03 00 02 00 
+            06A0    94 00 BC FF 14 00 00 00 valk
+            06A8    E0 00 C4 FF 2C 00 00 00 shadow2
+            06B0    DB 00 BE FF 0C 00 00 00 shadow1
+            B8 06 00 00 03 00 02 00 
+            06B8    E0 00 C4 FF 2C 00 00 00 shadow2
+            06C0    DB 00 BE FF 0C 00 00 00 shadow1
+            06C8    94 00 BC FF 14 00 00 00 valk
+            D0 06 00 00 04 00 08 00 
+            06D0    E0 00 BE FF 0C 00 00 00 
+            06D8    DC 00 BC FF 14 00 00 00 
+            06E0    95 00 BC FF 14 00 00 00 
+            06E8    CF 00 BC FF 14 00 00 00 
+        - Ugh 5-8 are identical except in subsprite order.
+
+- 0732:
+    - 268C8 seems to be a short that tells where the PTX file is (relative to that point).
+        - Probably coincidence. Can't find a similar offset for others.
+
+
+== PTP ==
+Container of images.
+Holds: PTGs, PTXs.
+
+Samples:
+    0461-BtlCharFace
+    0523-BtlCharFace
+        - Doesn't contain its fourth file!
+
+Header seems to be 20 bytes.
+Then it contains other files, like PTG and PTX.
+
+
+
+00.4    = "PTP\0"
+04.4    Number of files.
+08.4    =0?
+0C.4    =0?
+10.4*   List of PTG/PTX offsets (from start of file).
+
+
+
+
+== PTG file format ==
+
+Holds: PTXs.
+
+00.4    = "PTG@"
+04.4    ??
+        = 0x20
+        ? Table offset?
+08.4    First PTX.
+0C.4    Second PTX.
+10.2    Canvas width
+12.2    Canvas height
+14.2    Count of pieces using first PTX.
+16.2    Count using second PTX.
+18.2    =0?
+1A.2    =0?
+1C.2    =0?
+1E.2    =0?
+20.*    Tables.
+then    0-padded to width 16.
+
+Table row [0x14]:
++00.2   Horizontal offset to read from stream.
++02.2   Vertical offset to read.
++04.2   Horizontal offset to write to image.
++06.2   Vertical offset to write.
++08.2   =0?
++0A.2   Horizontal offset to stop reading. (Not inclusive)
++0C.2   Vertical offset to stop.
++0E.2   Horizontal offset to stop write.
++10.2   Vertical offset to stop.
++12.2   =0?
+
+
+! Can be split into multiple PTX files, using the same palette as the first.
+! Read the tile list as a single row of contiguous tiles, not as multiple rows.
+- Pretty sure the second PTX is always a single row.
+
+
+== PTX ==
+Simple image.
+    Texture?
+    See also: https://datacrystal.romhacking.net/wiki/Blaze_Union:ROM_map#PTX_Image_File_Format
+
+
+...
+14.1    =6?
+15.1    ??
+        =0B was fill[0]
+        =08 was fill[255]
+        =09 was fill[254]
+16.1    ??
+        =11 was fill[0]
+        =00 was fill[255]
+17.1    ??
+
+
+Fill mode (+15.1) samples:
+    0A: 0482-BtlCharFace-0
+
+
+== ZLB ==
+
+Example:
+    0000-ExiData.zlb
+    0002-SystemAllFile.zl
+
+Format:
+00.4    ="ZLIB"
+04.4    ??
+        = 01 1A 07 00
+08.*    A zlib stream.
+
+
+== .acx ==
+
+? Voices? 
+
+
+== SPA ==
+? Music?
+"(c)CRI"
+
+
+== VPD ==
+
+Samples:
+    2490-Dead_
+    2491-Demo_
+"(c)CRI"
+
+- Image file?
+
