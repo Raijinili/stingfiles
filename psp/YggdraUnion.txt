@@ -128,6 +128,8 @@ Part 0 header:
 - Then palettes.
     ! The first sprite assembly thing is right after the last palette.
     - Blank color seems to always be #B0B180.
+        - Use the ImageMagick command `mogrify -transparent "#B0B180" *.gif` to fix transparency.
+            - Or `mogrify -transparent "#B0B180" **/*.gif` for recursive folders.
 
 - Then the sprite assembly things. (Pointed to by the array of sprite assembly pointers.)
     +00.2   Array size.
