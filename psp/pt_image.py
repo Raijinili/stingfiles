@@ -432,6 +432,10 @@ class PTAImage:
         #WTF COUNT CAN BE 0 (Necromancer disappearance).
         sprites = [self.getshiftsprite2(offset + 8*i) for i in range(count)]
         # Now combine them.
+        if len(sprites) == 0:
+            #TODO: Figure out a better way to combine nothing.
+            canvas = Image.new('RGBA', (1,1), self.blank)
+            return canvas
         canvas = Image.new('RGBA', sprites[0].size, self.blank)
         for sprite in sprites:
             canvas.paste(sprite, mask=sprite)
