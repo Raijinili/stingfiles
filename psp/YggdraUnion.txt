@@ -127,6 +127,7 @@ Part 0 header:
 
 - Then palettes.
     ! The first sprite assembly thing is right after the last palette.
+    - Blank color seems to always be #B0B180.
 
 - Then the sprite assembly things. (Pointed to by the array of sprite assembly pointers.)
     +00.2   Array size.
