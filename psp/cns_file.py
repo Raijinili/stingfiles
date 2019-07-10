@@ -19,8 +19,9 @@ def decompress(infile, outfile=None):
 
 
 class CNSFile:
-    fmt = '<4sI4sIIII'
-    assert struct.calcsize(fmt) == 0x1C
+    MAGIC = b'@CNS'
+    FORMAT = '<4sI4sIIII'
+    assert struct.calcsize(FORMAT) == 0x1C
     
     def __init__(self, file):
         if isinstance(file, (str, Path)):
@@ -33,8 +34,8 @@ class CNSFile:
     def init_file(self, file):
         start = file.tell()
         head_raw = file.read(0x20)
-        assert head_raw[:4] == b'@CNS'
-        head = struct.unpack(self.fmt, head_raw[4:])
+        assert head_raw[:4] == self.MAGIC
+        head = struct.unpack(self.FORMAT, head_raw[4:])
         [
             ext,    # Maybe usable as the file extension.
             size,   # Decompressed size
