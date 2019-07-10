@@ -16,13 +16,36 @@ Samples:
 
 
 
-
-
 == @CNS ==
 
-00.4    ?="@CNS"
-04.4    ?="pta\0"
+Samples:
+    0121 to 0194
+        0146 is pta, while 0147 is ptx.
+        0158 (compressed) corresponds to 0206-btl_ (uncompressed)
+        0147-0194 probably corresponds to 0195-0242.
 
+00.4    ?="@CNS"
+04.4    ?="pta\0","ptx\0"
+08.4    ?Decompressed file size?
+0C.4    ?="101\0"
+10.4    ?=0
+14.4    ?=00000020
+        Pointer to start of compressed file?
+18.4    ?=0
+1C.4    ?=0
+20.*    Start of compressed file?
+
+
+-- Compression stream --
+
+start ::= size<128, char[size]
+    |   80 + length3, offset1
+
+Logic:
+    - If the first byte is < 80, then it's the length of a raw bytestring that follows.
+    - If the first byte is >= 80, then the next byte is another arg, and it represents a copy window.
+        - E.g. Hex "87 05" means the parameters are (7,5). The copy window is 5+1 bytes back, and is 7+3 bytes long.
+        - It IS possible for the copy window to pass the current buffer length. For example, hex "84 00" means 0+1 back and 4+3 long. It actually means copy the last byte 7 times.
 
 
 == PTA ==
